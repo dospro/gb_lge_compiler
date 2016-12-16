@@ -1,0 +1,1 @@
+from .lr1_parser import transform_to_dict

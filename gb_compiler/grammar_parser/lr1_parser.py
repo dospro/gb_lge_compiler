@@ -50,70 +50,59 @@ class LRItem(object):
         return text
 
 
+automata = re.compile(r'<(?P<left>\w+)>\s*::=\s*(?P<right>.+)\s*')
+right_matcher = re.compile(r'<(?P<non_terminal>[^>\n]+)>|"(?P<terminal>[^"\n]+)"')
+
+
+def transform_to_dict(string):
+    """Takes a string representing a line of the BNF file
+    and returns a dict with the left hand as the key and
+    a list of right hands as value"""
+    rules = automata.finditer(string)
+    grammar_dict = {}
+    for rule in rules:
+        right_side = rule.group("right")
+        left_side = rule.group("left")
+        right_hand = right_matcher.finditer(right_side)
+
+        tokens = []
+        for token in right_hand:
+            terminal = token.group("terminal")
+            non_terminal = token.group("non_terminal")
+            if terminal:
+                tokens.append({"terminal": terminal})
+            elif non_terminal:
+                tokens.append({"non_terminal": non_terminal})
+
+        if left_side in grammar_dict:
+            grammar_dict[left_side].append(tokens)
+        else:
+            grammar_dict[left_side] = [tokens]
+
+    return grammar_dict
+
+
 def read_bnf_file(bnf_filename):
-    """Opens a BNF file and create a list for the grammars."""
+    """Opens a BNF file and creates a python dict representing the grammar.
+    The dict keys are the right hands and the values are lists containing
+    dicts with keys "terminal" or "no_terminal".
+    """
 
     grammar_table = {}
     line_number = 0
 
-    regexp = re.compile(r'<(?:\w|-)+>|::=|"[^"]*"')
-    bnfFile = open(bnf_filename)
-    for line in bnfFile:
-        if line.startswith('\n') or line.startswith('%'):
+    with open(bnf_filename) as bnf_file:
+        for line in bnf_file:
+            result = transform_to_dict(line)
+            for key in result:
+                if key in grammar_table:
+                    for i in result[key]:
+                        grammar_table[key].append(i)
+                else:
+                    grammar_table[key] = result[key]
             line_number += 1
-            continue
-        tokensList = regexp.findall(line)
-        if not tokensList[0].startswith('<'):
-            print("l %d Error: El lado izquierdo debe ser un no terminal"
-                  % line_number)
-            line_number += 1
-            continue
 
-        if tokensList[1] != "::=":
-            print("l %d Error: Error de sintaxis" % line_number)
-            line_number += 1
-            continue
-
-        # Left hand token is always a terminal
-        leftHandText = tokensList[0].strip('<>')
-        if leftHandText not in tokensSet:
-            tokensSet[leftHandText] = False
-
-        # We will map the left hand to a list of tokens(the right hand)
-        if leftHandText in grammar_table:
-            grammar_table[leftHandText].append(list())
-        else:
-            grammar_table[leftHandText] = [[]]
-
-        currentRightHand = len(grammar_table[leftHandText]) - 1
-        for token in tokensList[2:]:
-            tempToken = Token()
-            if token.startswith('<'):
-                tempToken.isTerminal = False
-                tempToken.text = token.strip('<>')
-            elif token.startswith('"'):
-                tempToken.isTerminal = True
-                tempToken.text = token.strip('"')
-
-            grammar_table[leftHandText][currentRightHand].append(tempToken)
-            if tempToken.text not in tokensSet and tempToken.text != '$':
-                tokensSet[tempToken.text] = tempToken.isTerminal
-        line_number += 1
-
-    '''for n in grammar_table:
-        print("%s --> " % n.leftHand.text, end="")
-        for m in n.rightHands:
-            print(m.text, end=" ")
-        print("")
-    print("")
-
-    print("Tokens list:")
-    for n in tokensSet:
-        print(n.text, " ", end="")
-    print("\n")'''
-
-    bnfFile.close()
-    return grammar_table
+    print(grammar_table)
 
 
 def firstSet(grammar, noTerminal):
@@ -402,19 +391,20 @@ def saveGPF(grammar, actionTable, gotoTable, outFilename):
     print("Done")
 
 
-oparser = optparse.OptionParser()
+if __name__ == "__main__":
+    oparser = optparse.OptionParser()
 
-oparser.add_option("-o", action="store", dest="outfile")
-opts, args = oparser.parse_args()
+    oparser.add_option("-o", action="store", dest="outfile")
+    opts, args = oparser.parse_args()
 
-print("Grammar Parser")
-if not args:
-    print("Usage: lr1_parser.py [options]")
-    raise SystemExit
+    print("Grammar Parser")
+    if not args:
+        print("Usage: lr1_parser.py [options]")
+        raise SystemExit
 
-if not opts.outfile:
-    opts.outfile = "out.gpf"
+    if not opts.outfile:
+        opts.outfile = "out.gpf"
 
-canCollection = build_tables(args[0], opts.outfile)
+    canCollection = build_tables(args[0], opts.outfile)
 
-print("Done")
+    print("Done")

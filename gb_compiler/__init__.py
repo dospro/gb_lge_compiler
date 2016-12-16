@@ -1,0 +1,1 @@
+from gb_compiler.grammar_parser import transform_to_dict
